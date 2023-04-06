@@ -15,7 +15,8 @@ if (!file.exists(output_dir))
 df_gsea <- read.csv("fgsea.csv", header = T)
 
 # Create normalized enrichment score matrix
-simple_df <- df_gsea[, c("pathway", "NES", "subset")]
+# pathway = columns, NES = values, subset = rows
+simple_df <- df_gsea[, c("pathway", "NES", "subset")] 
 NES_df <- pivot_wider(simple_df, names_from = pathway, values_from = NES)
 NES_matrix <- data.matrix(NES_df[, 2:ncol(NES_df)])
 rownames(NES_matrix) <- pull(NES_df[1], subset)
@@ -60,7 +61,7 @@ col_fun <- colorRamp2(c(min(NES_matrix, na.rm = T), 0, max(NES_matrix, na.rm = T
 # Function to add levels of significance
 cell_fun <- function(j, i, x, y, width, height, fill) {
   padj_value <- df_gsea %>%
-    filter(subset == rownames(NES_matrix)[i],
+    dplyr::filter(subset == rownames(NES_matrix)[i],
            pathway == colnames(NES_matrix)[j]) %>%
     pull(padj)
   
@@ -77,7 +78,7 @@ cell_fun <- function(j, i, x, y, width, height, fill) {
 
 # Legend for significance levels
 significance_lgd <- Legend(
-  labels = c("≤ 0.10", "≤ 0.05", "≤ 0.01"),
+  labels = c("<= 0.10", "<= 0.05", "<= 0.01"),
   title = "Significance (FDR)",
   type = "points",
   pch = c("*", "**", "***"),
