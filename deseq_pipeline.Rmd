@@ -141,6 +141,8 @@ names(diff_express_results) <- data_subsets$subset_name
 
 # Create one file from diff express results
 diffexpress_df <- do.call(rbind, mapply(function(x, y) data.frame(row.names(x), x, "subset" = y), x = diff_express_results, y = names(diff_express_results), SIMPLIFY = FALSE))
+names(diffexpress_df)[names(diffexpress_df) == 'row.names.x.'] <- 'ENSEMBL'
+
 fwrite(diffexpress_df, deseq_out_fn)
 
 ```
