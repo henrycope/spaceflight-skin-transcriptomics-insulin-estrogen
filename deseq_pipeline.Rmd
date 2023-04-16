@@ -1,0 +1,147 @@
+---
+title: "Deseq pipeline"
+output: html_notebook
+---
+
+Setup session
+```{r}
+library(purrr)
+library(dplyr)
+library(tximport)
+library(DESeq2)
+library(stringr)
+library(data.table)
+
+# Define RNA-Seq datasets to be analyzed
+dataset_ids <- c('238', '239', '240', '241', '254')
+
+# Outputted file names
+subsets_fn <- "subsets.csv"
+deseq_out_fn <- "deseq.csv"
+
+# Define exclusion criteria for dataset conditions
+exclusion_criteria <- "VIV|BSL|FLT_1G"
+
+# Define file paths and names
+data_dirs <- file.path('data', dataset_ids)
+
+# Set seed and print session info
+set.seed(42)
+sessionInfo()
+```
+
+Load metadata 
+```{r}
+# Get paths to all metadata zip files
+all_data_files <- list.files(data_dirs, full.names = TRUE)
+mdata_file_paths <- all_data_files[grepl("*metadata_GLDS*", all_data_files)]
+
+# Read in metadata for each dataset
+metadata <- map(set_names(mdata_file_paths, dataset_ids), ~{
+  unzip(.x, exdir = dirname(.x), overwrite = TRUE)
+  metadata_file <- list.files(dirname(.x), pattern = "s_.*txt$", full.names = TRUE)
+  read.delim(metadata_file, stringsAsFactors = TRUE) %>% 
+    mutate(Condition = gsub("^Mmus_|-|*_Rep.*$","", Sample.Name))
+}) 
+
+# Apply exclusion criteria to metadata
+if (!is.null(exclusion_criteria)) {
+  metadata <- map(metadata, function(x) dplyr::filter(x, !grepl(exclusion_criteria, Condition)))
+}
+metadata <- map(metadata, droplevels)
+
+# TODO modify metadata to create subsets.csv automatically
+```
+
+Load estimated counts
+```{r}
+#TODO refactor this code
+
+# Helper function to load counts files for a dataset
+import_counts_files <- function(dataset_idx) {
+
+  data_folders <- list.dirs('data', recursive = FALSE)
+
+  files <- list.files(data_folders[[dataset_idx]], full.names = TRUE)
+
+  counts_files <- files[grepl("*.genes.results$", files)]
+
+  filtered_files <- c()
+  for(sample_name in metadata[[dataset_idx]]$Sample.Name) {
+
+    sample_name <- gsub(" ", "", sample_name) # Sometimes sample name has extra whitespaces
+
+    file <- counts_files[grepl(sample_name, counts_files)]
+    names(file) <- sample_name
+    filtered_files <- c(filtered_files, file)
+  }
+
+  imported <- tximport(filtered_files, type = "rsem", txIn = FALSE, txOut = FALSE)
+
+  # Correct for zero gene length issue (https://support.bioconductor.org/p/92763/)
+  imported$length[imported$length == 0] <- 1
+
+  return(imported)
+}
+
+# Load counts data - using metadata
+estimated_counts <- vector("list", length(dataset_ids))
+for(idx in 1:length(dataset_ids)) {
+  estimated_counts[[idx]] <- import_counts_files(idx)
+}
+names(estimated_counts) <- dataset_ids
+
+# Raw counts data
+raw_counts_dfs <- lapply(estimated_counts, function(x) as.data.frame(x$counts))
+
+raw_counts_dfs_with_row_names <- lapply(raw_counts_dfs, function(x) {
+  x$RowNames <- rownames(x)
+  x <- x[, c("RowNames", names(x)[-which(names(x) == "RowNames")])]
+  return(x)
+})
+
+mapply(function(x, y) fwrite(x, file = paste0(y, "_raw_counts.csv")), x = raw_counts_dfs_with_row_names, y = dataset_ids)
+
+```
+
+Perform differential expression analysis
+```{r}
+# Create dds objects
+dds_list <- vector("list", length(dataset_ids))
+dds_list <- mapply(function(x, y) DESeqDataSetFromTximport(txi = x, colData = y, design = ~ Condition), x = estimated_counts, y = metadata)
+names(dds_list) <- dataset_ids
+
+# Reduce down to only ENSEMBL genes (remove ERCC)
+dds_list <- lapply(dds_list, function(x) x[grepl("ENSMUSG", row.names(x)), ])
+
+# Filter out low counts
+dds_list <- lapply(dds_list, function(x) x[rowSums(counts(x)) > 10, ])
+
+# Run differential expression analysis
+dds_list <- lapply(dds_list, DESeq)
+```
+
+Organize differential expression results
+```{r}
+data_subsets <- read.csv(file = subsets_fn)
+colnames(data_subsets) <- c('subset_name', 'condition_nonbase', 'condition_base', 'dataset_name', 'dataset_id')
+
+# Calculate differential expression results
+diff_express_results <- lapply(1:nrow(data_subsets), function(i) {
+  results(
+    object = dds_list[[data_subsets$dataset_id[i]]],
+    contrast = c("Condition",
+                 data_subsets$condition_nonbase[i],
+                 data_subsets$condition_base[i]),
+    cooksCutoff = FALSE,
+    independentFiltering = FALSE
+  )
+})
+names(diff_express_results) <- data_subsets$subset_name
+
+# Create one file from diff express results
+diffexpress_df <- do.call(rbind, mapply(function(x, y) data.frame(row.names(x), x, "subset" = y), x = diff_express_results, y = names(diff_express_results), SIMPLIFY = FALSE))
+fwrite(diffexpress_df, deseq_out_fn)
+
+```
+

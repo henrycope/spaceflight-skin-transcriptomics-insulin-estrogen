@@ -14,7 +14,9 @@ if (!file.exists("data")) {
 dataset_dirs <- file.path("data", dataset_ids)
 
 if (all(file.exists(dataset_dirs))) {
-  message("Data appears to already be downloaded, please delete existing files before redownloading.")
+  message(
+    "Data appears to already be downloaded, please delete existing files before re-downloading."
+  )
   q() # exit R
 }
 
@@ -25,11 +27,15 @@ request_url <- paste0(api_url, paste0(dataset_ids, collapse = ","))
 response <- fromJSON(request_url)
 
 # Process API response, to get urls for raw counts and metadata files to download
-file_urls <- map(response$studies, ~ .x$study_files$remote_url[grepl("*genes.results|*metadata_GLDS*", .x$study_files$remote_url)])
+file_urls <-
+  map(response$studies, ~ .x$study_files$remote_url[grepl("*genes.results|*metadata_GLDS*", .x$study_files$remote_url)])
 
 # Download files
 walk2(file_urls, dataset_dirs, ~ walk2(.x, .y, ~ {
-  file_local_path <- file.path(.y, sub(".*file=([^=]*$)", "\\1", .x)) # regex to get just file name
+  file_local_path <-
+    file.path(.y, sub(".*file=([^=]*$)", "\\1", .x)) # regex to get just file name
   
   download.file(file.path("https://osdr.nasa.gov/", .x), destfile = file_local_path)
 }))
+
+# TODO add checks to ensure all files downloaded
