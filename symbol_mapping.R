@@ -49,7 +49,8 @@ data_with_mouse_symbols <- left_join(data, mouse_gene_symbols, by = c("ENSEMBL" 
 data_with_both_symbols <- left_join(data_with_mouse_symbols, human_gene_symbols, c("ENSEMBL" = "ensembl_gene_id"))
 
 # Rename the columns
-data_with_both_symbols <- data_with_both_symbols %>% rename(SYMBOL = external_gene_name.x, HGNC = external_gene_name.y)
+colnames(data_with_both_symbols)[colnames(data_with_both_symbols) == "external_gene_name.x"] <- "SYMBOL"
+colnames(data_with_both_symbols)[colnames(data_with_both_symbols) == "external_gene_name.y"] <- "HGNC"
 
 # Replace NAs with blanks
 data_with_both_symbols[] <- lapply(data_with_both_symbols, function(x) ifelse(is.na(x), "", x))

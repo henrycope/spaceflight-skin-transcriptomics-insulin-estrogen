@@ -3,7 +3,7 @@ library("fgsea")
 library("dplyr")
 library("data.table")
 
-deseq_in_fn <- "deseq.csv"
+deseq_in_fn <- "deseq_annotated.csv"
 gmt_dir <- "gmt_files"
 gsea_out_fn <- "fgsea.csv"
 
@@ -60,7 +60,8 @@ fgsea_res <- lapply(gene_sets,
                           pathways = x,
                           stats = y,
                           minSize = 1,
-                          maxSize = 10000
+                          maxSize = 10000,
+                          nperm = 10000
                         )))
 
 # Condense to a combined df per category
