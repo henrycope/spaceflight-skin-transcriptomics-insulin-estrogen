@@ -1,0 +1,11 @@
+﻿subset_name,condition_nonbase,condition_base,dataset_name,dataset_id,plot_name,mission,spaceflight,strain,diet,euthanasia,duration,tissue,sex,age ,recovery
+238_GCvsFLT_JC,C576J_DSKN_FLT_uG_JC,C576J_DSKN_GC_1G_JC,238,1,MHU-2: Dorsal skin with JC diet,MHU-2,GCvsFLT,C57BL,JC,LAR,30,Dorsal,Male,9,1
+238_GCvsFLT_JCwFOS,C576J_DSKN_FLT_uG_JCwFOS,C576J_DSKN_GC_1G_JCwFOS,238,1,MHU-2: Dorsal skin with JCwFOS diet,MHU-2,GCvsFLT,C57BL,JCwFOS,LAR,30,Dorsal,Male,9,1
+239_GCvsFLT_JC,C576J_FSKN_FLT_uG_JC,C576J_FSKN_GC_1G_JC,239,2,MHU-2: Femoral skin with JC diet,MHU-2,GCvsFLT,C57BL,JC,LAR,30,Femoral,Male,9,1
+239_GCvsFLT_JCwFOS,C576J_FSKN_FLT_uG_JCwFOS,C576J_FSKN_GC_1G_JCwFOS,239,2,MHU-2: Femoral skin with JCwFOS diet,MHU-2,GCvsFLT,C57BL,JCwFOS,LAR,30,Femoral,Male,9,1
+240,BALTAL_DSKN_FLT,BALTAL_DSKN_GC,240,3,RR-5: Dorsal skin,RR-5,GCvsFLT,BALB,NuRFB,LAR,30,Dorsal,Female,30,30
+241,BALTAL_FSKN_FLT,BALTAL_FSKN_GC,241,4,RR-5: Femoral skin,RR-5,GCvsFLT,BALB,NuRFB,LAR,30,Femoral,Female,30,30
+254_GCvsFLT_25_C57BL,C576J_SKN_FLT_25days,C576J_SKN_GC_25days,254,5,RR-7: C57BL strain for 25 days,RR-7,GCvsFLT,C57BL,NuRFB,non-LAR,25,Dorsal,Female,11,0
+254_GCvsFLT_75_C57BL,C576J_SKN_FLT_75days,C576J_SKN_GC_75days,254,5,RR-7: C57BL strain for 75 days,RR-7,GCvsFLT,C57BL,NuRFB,non-LAR,75,Dorsal,Female,11,0
+254_GCvsFLT_25_C3HHeJ,C3HHeJ_SKN_FLT_25days,C3HHeJ_SKN_GC_25days,254,5,RR-7: C3H strain for 25 days,RR-7,GCvsFLT,C3H,NuRFB,non-LAR,25,Dorsal,Female,11,0
+254_GCvsFLT_75_C3HHeJ,C3HHeJ_SKN_FLT_75days,C3HHeJ_SKN_GC_75days,254,5,RR-7: C3H strain for 75 days,RR-7,GCvsFLT,C3H,NuRFB,non-LAR,75,Dorsal,Female,11,0
