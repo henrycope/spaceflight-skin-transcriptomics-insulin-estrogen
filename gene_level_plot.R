@@ -1,64 +1,90 @@
-# TODO Refactor
-
 # Load libraries
 library(reshape2)
 library(ComplexHeatmap)
 library(dplyr)
 library(circlize)
 library(tidyr)
+library(RColorBrewer)
 
 # Set output directory
 output_dir <- "plots"
 
-# Load FGSEA results from file
+########### PREPROCESSING ###########
+
+# Load GSEA results from file
 df_gsea <- read.csv("fgsea.csv", header = T)
 
-# Get unique pathways
-pathways <- unique(df_gsea$pathway)
+# Create vector of all unique pathway names
+pathway_names <- unique(df_gsea$pathway)
 
-# Loop over pathways and get all leading edge genes for each pathway
+# create a list of all of the leading edge genes for each pathway
 union_genes <- list()
-for (p in pathways) {
+for (p in pathway_names) {
   path_df <- df_gsea %>% dplyr::filter(pathway == p)
-  genes <- unlist(strsplit(paste(path_df$leadingEdge, collapse = "|"), "\\|"))
+  genes <-
+    unlist(strsplit(paste(path_df$leadingEdge, collapse = "|"), "\\|"))
   union_genes[[p]] <- unique(genes)
 }
 
 # Load deseq results file
 deseq_df <- read.csv("deseq_annotated.csv", header = T)
 
-# Reduce down to only HGNC mapped genes 
-df <- deseq_df[deseq_df$HGNC != "", ]
+# Reduce down to only HGNC mapped genes
+deseq_df_mapped <- deseq_df[deseq_df$HGNC != "",]
 
-# Return dataframes for just the leading edge genes for each pathway 
-pathway_dfs <- lapply(union_genes, function(x) df[df$HGNC %in% x, ])
+# Return dataframes for just the leading edge genes for each pathway
+pathway_dfs <-
+  lapply(union_genes, function(x)
+    deseq_df_mapped[deseq_df_mapped$HGNC %in% x,])
 
-# Filter down to significant genes FDR <= 0.05
-sig_pathway_dfs <- lapply(pathway_dfs, function(x) subset(x, padj <= 0.05))
-sig_2_pathway_dfs <- lapply(sig_pathway_dfs, function(x) {
-  duplicated_symbols <- x[duplicated(x$SYMBOL) | duplicated(x$SYMBOL, fromLast = TRUE), ]
-  duplicated_symbols
+# Take a note of significant genes FDR <= 0.01
+sig_gene_symbols <-
+  lapply(pathway_dfs, function(x)
+    subset(x, padj <= 0.01)$SYMBOL)
+
+# Filter down to only genes that were significant in at least one subset
+pathway_dfs_sig_genes <-
+  mapply(
+    function(x, y)
+      subset(x, x$SYMBOL %in% y),
+    x = pathway_dfs,
+    y = sig_gene_symbols,
+    SIMPLIFY = F
+  )
+
+# Ensure the subset order matches the original deseq_df
+pathway_dfs_sig_genes <- lapply(pathway_dfs_sig_genes, function(x) {
+  x %>% mutate(subset = factor(subset, levels = unique(deseq_df$subset)))
 })
 
-# Create t-score matrices (one per pathway)
-pathway_dfs_unique <- lapply(pathway_dfs, function(x) {
-  x %>% 
-    distinct(SYMBOL, subset, .keep_all = TRUE) %>% 
-    mutate(subset = factor(subset, levels = unique(deseq_df$subset)))
-})
+# Convert dataframes into t-score matrices
+tscore_matrices <-
+  lapply(pathway_dfs_sig_genes, function(x)
+    t(acast(x, subset ~ SYMBOL, value.var = "stat")))
 
-pathway_dfs_unique_sig <- mapply(function(x,y ) subset(x, x$SYMBOL %in% y$SYMBOL), x = pathway_dfs_unique, y = sig_2_pathway_dfs, SIMPLIFY = F)
-
-tscore_matrices <- lapply(pathway_dfs_unique_sig, function(x) t(acast(x, subset ~ SYMBOL, value.var = "stat")))
+########### PLOTTING ###########
 
 # Load metadata
-meta_data_df <- read.csv("subsets.csv", row.names = 1, encoding = "UTF-8")
+meta_data_df <-
+  read.csv("subsets.csv", row.names = 1, encoding = "UTF-8")
 
 # Heatmap annotation bar colours
 anno_colors <- list(
-  Mission = c("MHU-2" = "#1D91C0", "RR-5" = "#F7FCFD", "RR-7" = "#CB181D"),
-  Strain = c("C57BL" = "#0072b2", "BALB" = "#914770", "C3H" = "#7f7f7f"),
-  Diet = c("JC" = "#762A83", "JCwFOS" = "#FFEE99", "NuRFB" = "#225555"),
+  Mission = c(
+    "MHU-2" = "#1D91C0",
+    "RR-5" = "#F7FCFD",
+    "RR-7" = "#CB181D"
+  ),
+  Strain = c(
+    "C57BL" = "#0072b2",
+    "BALB" = "#914770",
+    "C3H" = "#7f7f7f"
+  ),
+  Diet = c(
+    "JC" = "#762A83",
+    "JCwFOS" = "#FFEE99",
+    "NuRFB" = "#225555"
+  ),
   Euthanasia = c("LAR" = "#EE8866", "non-LAR" = "#EEDD88"),
   Duration = c("25" = "#f419ec", "30" = "#4419f4", "75" = "#19f4f2"),
   Tissue = c("Dorsal" = "#222255", "Femoral" = "#663333"),
@@ -87,42 +113,62 @@ leftha <- columnAnnotation(
 
 # Legend for significance levels
 significance_lgd <- Legend(
-  labels = c("<= 0.10", "<= 0.05", "<= 0.01"),
+  labels = c("<= 0.05", "<= 0.01", "<= 0.001"),
   title = "Significance (FDR)",
   type = "points",
   pch = c("*", "**", "***"),
   background = "white"
 )
 
-# Plot heatmap
-pdf(file.path(output_dir, "pathway_gene_regulation_heatmap_double.pdf"), height = 10)
+# Function to add levels of significance
+cell_fun <- function(j, i, x, y, width, height, fill) {
+  padj_value <- deseq_df %>%
+    dplyr::filter(SYMBOL == rownames(matrix)[i],
+                  subset == colnames(matrix)[j]) %>%
+    pull(padj)
+  
+  if (length(padj_value) == 0 || is.na(padj_value))
+    return()
+  
+  y_adj <- y - unit(0.0075, "npc")
+  
+  if (padj_value <= 0.001)
+    grid.text("***",
+              x,
+              y_adj,
+              just = c("center", "bottom"),
+              gp = gpar(fontsize = 12))
+  else if (padj_value <= 0.01)
+    grid.text("**",
+              x,
+              y_adj,
+              just = c("center", "bottom"),
+              gp = gpar(fontsize = 12))
+  else if (padj_value <= 0.05)
+    grid.text("*",
+              x,
+              y_adj,
+              just = c("center", "bottom"),
+              gp = gpar(fontsize = 12))
+}
 
-text_size <- c("Estrogen Signalling" = 11, "Insulin Resistance" = 11, "Insulin Signalling" = 11)
-for(matrix_name in names(tscore_matrices)) {
+# Heatmap colour scale
+col_fun <-
+  colorRamp2(c(-15,-5, 0, 5, 15),
+             c("darkblue", "blue", "white", "red", "darkred"))
+
+# Plot heatmap into pdf file
+pdf(file.path(output_dir, "gene_heatmaps.pdf"), height = 15)
+
+text_size <-
+  c(
+    "Estrogen Signalling" = 10,
+    "Insulin Resistance" = 10,
+    "Insulin Signalling" = 7
+  )
+for (matrix_name in names(tscore_matrices)) {
   matrix <- tscore_matrices[[matrix_name]]
   
-  # Heatmap colour scale
-  col_fun <- colorRamp2(c(min(matrix, na.rm = T), 0, max(matrix, na.rm = T)), c("blue", "white", "red"))
-  
-  # Function to add levels of significance
-  cell_fun <- function(j, i, x, y, width, height, fill) {
-    padj_value <- deseq_df %>%
-      dplyr::filter(SYMBOL == rownames(matrix)[i],
-              subset == colnames(matrix)[j]) %>%
-      pull(padj)
-    
-    if (length(padj_value) == 0 || is.na(padj_value))
-      return()
-    
-    if (padj_value <= 0.01)
-      grid.text("***", x, y, gp = gpar(fontsize = 6))
-    else if (padj_value <= 0.05)
-      grid.text("**", x, y, gp = gpar(fontsize = 6))
-    else if (padj_value <= 0.1)
-      grid.text("*", x, y, gp = gpar(fontsize = 6))
-  }
-  
-  # Build heatmap
   tscore_heatmap <- Heatmap(
     matrix,
     name = "t-score",
